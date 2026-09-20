@@ -79,6 +79,7 @@ enum PhoneActionError: LocalizedError {
             case 401: return "OpenRouter rejected the key. Check it in Settings."
             case 402: return "OpenRouter reports no credit for this key."
             case 429: return "OpenRouter's rate limit was reached. Try again shortly."
+            case 404: return "OpenRouter cannot serve \(PhoneBrain.model). Pick another model in Settings, or allow more providers at openrouter.ai/settings/privacy."
             default: return "OpenRouter returned HTTP \(status). \(message ?? "Nothing was opened.")"
             }
         }
@@ -86,8 +87,13 @@ enum PhoneActionError: LocalizedError {
 }
 
 enum PhoneBrain {
-    static let defaultModel = "inception/mercury-2.5"
-    static var model: String { UserDefaults.standard.string(forKey: "PlannerModel") ?? defaultModel }
+    static let defaultModel = "google/gemini-3.5-flash-lite"
+    /// Overridable in Settings, for accounts whose allowed providers do not serve the default.
+    static var model: String {
+        let chosen = (UserDefaults.standard.string(forKey: "PlannerModel") ?? "")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        return chosen.isEmpty ? defaultModel : chosen
+    }
 
     /// Shortcut names the person typed in Settings. Without them the model is guessing at names,
     /// because iOS gives no way to read someone's Shortcuts library.

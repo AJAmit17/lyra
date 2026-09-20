@@ -40,7 +40,7 @@ public struct PlanStep: Codable, Equatable {
 
 /// Turns one spoken utterance into ordered steps with an LLM through OpenRouter. Lyra still selects every on-screen target.
 public enum Planner {
-    public static let defaultModel = "inception/mercury-2.5"
+    public static let defaultModel = "google/gemini-3.5-flash-lite"
     /// Overridable for benchmarking: `defaults write local.lyra PlannerModel <openrouter model id>`.
     public static var model: String { UserDefaults.standard.string(forKey: "PlannerModel") ?? defaultModel }
     /// Token usage of the last plan, for the log.

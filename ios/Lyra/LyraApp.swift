@@ -26,6 +26,10 @@ final class PhoneModel: ObservableObject {
     @Published var shortcuts = UserDefaults.standard.string(forKey: "Shortcuts") ?? "" {
         didSet { UserDefaults.standard.set(shortcuts, forKey: "Shortcuts") }
     }
+    /// Empty means PhoneBrain.defaultModel.
+    @Published var modelID = UserDefaults.standard.string(forKey: "PlannerModel") ?? "" {
+        didSet { UserDefaults.standard.set(modelID, forKey: "PlannerModel") }
+    }
     let speech = PhoneSpeech()
     let wake = WakeWord()
     /// Off by default: it holds the microphone open for as long as the app is in front.
@@ -280,6 +284,12 @@ private struct SettingsSheet: View {
                         .disabled(model.pendingTypeSafe.trimmingCharacters(in: .whitespaces).isEmpty &&
                                   model.pendingOpenRouter.trimmingCharacters(in: .whitespaces).isEmpty)
                     Text("Both are kept in this iPhone's Keychain. OpenRouter is the one the phone calls: your command and your shortcut names go to it, nothing else. TypeSafe is stored for the Mac app's pipeline and is not called from the phone.")
+                        .font(.caption).foregroundStyle(.secondary)
+                }
+                Section("Model") {
+                    TextField(PhoneBrain.defaultModel, text: $model.modelID)
+                        .autocorrectionDisabled().textInputAutocapitalization(.never)
+                    Text("An OpenRouter model id. Leave it empty for \(PhoneBrain.defaultModel). Change it if your account's allowed providers cannot serve that one — OpenRouter answers 404 when none of them can.")
                         .font(.caption).foregroundStyle(.secondary)
                 }
                 Section("Wake word") {
