@@ -21,7 +21,8 @@ final class PhoneModel: ObservableObject {
     @Published var detail = ""
     @Published var history: [String] = []
     @Published var isThinking = false
-    @Published var pendingKey = ""
+    @Published var pendingTypeSafe = ""
+    @Published var pendingOpenRouter = ""
     @Published var shortcuts = UserDefaults.standard.string(forKey: "Shortcuts") ?? "" {
         didSet { UserDefaults.standard.set(shortcuts, forKey: "Shortcuts") }
     }
@@ -31,7 +32,10 @@ final class PhoneModel: ObservableObject {
     @Published var wakeWordEnabled = UserDefaults.standard.bool(forKey: "WakeWord") {
         didSet { UserDefaults.standard.set(wakeWordEnabled, forKey: "WakeWord"); syncWake() }
     }
-    var hasKey: Bool { Keys.key != nil }
+    var hasTypeSafe: Bool { Keys.read(Keys.typeSafe) != nil }
+    var hasOpenRouter: Bool { Keys.read(Keys.openRouter) != nil }
+    /// The phone needs the OpenRouter key to do anything; TypeSafe is stored alongside it.
+    var hasKey: Bool { hasOpenRouter }
 
     init() {
         speech.onFinal = { [weak self] text in self?.run(text) }
@@ -82,9 +86,11 @@ final class PhoneModel: ObservableObject {
         }
     }
 
-    func saveKey() {
-        Keys.save(pendingKey)
-        pendingKey = ""
+    func saveKeys() {
+        Keys.save(pendingTypeSafe, account: Keys.typeSafe)
+        Keys.save(pendingOpenRouter, account: Keys.openRouter)
+        pendingTypeSafe = ""
+        pendingOpenRouter = ""
         objectWillChange.send()
         syncWake()
     }
@@ -93,59 +99,149 @@ final class PhoneModel: ObservableObject {
 private struct CommandView: View {
     @ObservedObject var model: PhoneModel
     @ObservedObject private var speech: PhoneSpeech
+    @ObservedObject private var wake: WakeWord
     @State private var showingSettings = false
     @State private var typed = ""
+    @FocusState private var typing: Bool
 
     init(model: PhoneModel) {
         self.model = model
         self.speech = model.speech
+        self.wake = model.wake
     }
 
+    private var isOpen: Bool { speech.isListening || model.isThinking }
+
     var body: some View {
-        NavigationStack {
-            VStack(spacing: 24) {
+        ZStack {
+            Color(red: 0.04, green: 0.04, blue: 0.07).ignoresSafeArea()
+
+            // A soft pool of light under the button, so the screen has a centre of gravity.
+            RadialGradient(colors: [Color.teal.opacity(speech.isListening ? 0.22 : 0.10), .clear],
+                           center: .init(x: 0.5, y: 0.78), startRadius: 4, endRadius: 320)
+                .ignoresSafeArea()
+                .animation(.smooth(duration: 0.4), value: speech.isListening)
+
+            VStack(spacing: 0) {
+                header
                 Spacer()
-                Text(speech.isListening && !speech.transcript.isEmpty ? speech.transcript : model.headline)
-                    .font(.title2.weight(.semibold))
-                    .multilineTextAlignment(.center)
-                    .animation(.default, value: model.headline)
-                if !model.detail.isEmpty {
-                    Text(model.detail).font(.callout).foregroundStyle(.secondary)
-                        .multilineTextAlignment(.center)
-                }
-                if !speech.status.isEmpty {
-                    Text(speech.status).font(.footnote).foregroundStyle(.secondary)
-                }
-                Spacer()
+                state
+                    .padding(.bottom, 34)
                 micButton
-                HStack {
-                    TextField("Or type a command", text: $typed)
-                        .textFieldStyle(.roundedBorder)
-                        .onSubmit { send() }
-                    Button("Run", action: send).disabled(typed.trimmingCharacters(in: .whitespaces).isEmpty)
-                }
-                if !model.history.isEmpty {
-                    List(model.history, id: \.self) { line in
-                        Text(line).font(.footnote).foregroundStyle(.secondary)
-                    }
-                    .listStyle(.plain)
-                    .frame(maxHeight: 160)
-                }
+                Spacer().frame(height: 26)
+                history
+                controls
             }
-            .padding(24)
-            .navigationTitle("Lyra")
-            .toolbar {
-                Button { showingSettings = true } label: { Image(systemName: "gearshape") }
+            .padding(.horizontal, 20)
+        }
+        .preferredColorScheme(.dark)
+        .overlay {
+            IslandPanel(title: notchTitle, subtitle: notchSubtitle, level: speech.level,
+                        isListening: speech.isListening, isOpen: isOpen)
+        }
+        .sheet(isPresented: $showingSettings) { SettingsSheet(model: model) }
+        .task { if !model.hasKey { showingSettings = true } else { model.syncWake() } }
+    }
+
+    private var header: some View {
+        HStack {
+            Text("Lyra").font(.system(size: 17, weight: .semibold)).foregroundStyle(.white)
+            if wake.isRunning {
+                Label("hey lyra", systemImage: "waveform")
+                    .font(.system(size: 11, weight: .medium))
+                    .foregroundStyle(.teal)
+                    .padding(.horizontal, 8).padding(.vertical, 4)
+                    .background(Capsule().fill(Color.teal.opacity(0.14)))
             }
-            .sheet(isPresented: $showingSettings) { SettingsSheet(model: model) }
-            .task {
-                if !model.hasKey { showingSettings = true } else { model.syncWake() }
+            Spacer()
+            Button { showingSettings = true } label: {
+                Image(systemName: "gearshape").font(.system(size: 16))
+                    .foregroundStyle(.white.opacity(0.55))
             }
         }
-        .overlay(alignment: .top) {
-            NotchPanel(title: notchTitle, subtitle: notchSubtitle,
-                       level: speech.level, isOpen: speech.isListening || model.isThinking)
+        .padding(.top, 8)
+    }
+
+    private var state: some View {
+        VStack(spacing: 10) {
+            Text(speech.isListening && !speech.transcript.isEmpty ? speech.transcript : model.headline)
+                .font(.system(size: 26, weight: .semibold))
+                .foregroundStyle(.white)
+                .multilineTextAlignment(.center)
+                .minimumScaleFactor(0.7)
+            if !model.detail.isEmpty {
+                Text(model.detail)
+                    .font(.system(size: 14)).foregroundStyle(.white.opacity(0.5))
+                    .multilineTextAlignment(.center)
+            }
+            if !model.hasKey {
+                Button("Add your keys") { showingSettings = true }
+                    .font(.system(size: 14, weight: .medium))
+                    .buttonStyle(.borderedProminent).tint(.teal)
+                    .padding(.top, 4)
+            }
         }
+        .animation(.smooth(duration: 0.25), value: model.headline)
+    }
+
+    @ViewBuilder
+    private var history: some View {
+        if !model.history.isEmpty {
+            VStack(alignment: .leading, spacing: 6) {
+                ForEach(model.history.prefix(3), id: \.self) { line in
+                    Text(line)
+                        .font(.system(size: 12)).foregroundStyle(.white.opacity(0.35))
+                        .lineLimit(1).frame(maxWidth: .infinity, alignment: .leading)
+                }
+            }
+            .padding(.bottom, 14)
+            .transition(.opacity)
+        }
+    }
+
+    private var controls: some View {
+        VStack(spacing: 16) {
+            HStack(spacing: 10) {
+                TextField("Type a command", text: $typed)
+                    .focused($typing)
+                    .submitLabel(.go)
+                    .onSubmit(send)
+                    .padding(.horizontal, 14).padding(.vertical, 11)
+                    .background(Capsule().fill(.white.opacity(0.07)))
+                    .foregroundStyle(.white)
+                Button(action: send) {
+                    Image(systemName: "arrow.up")
+                        .font(.system(size: 15, weight: .semibold))
+                        .frame(width: 40, height: 40)
+                        .background(Circle().fill(typed.isEmpty ? Color.white.opacity(0.08) : Color.teal))
+                        .foregroundStyle(typed.isEmpty ? .white.opacity(0.3) : .white)
+                }
+                .disabled(typed.trimmingCharacters(in: .whitespaces).isEmpty)
+            }
+        }
+        .padding(.bottom, 12)
+    }
+
+    private var micButton: some View {
+        Button(action: model.toggle) {
+            ZStack {
+                Circle()
+                    .fill(speech.isListening ? AnyShapeStyle(Color.red.gradient)
+                                             : AnyShapeStyle(Color.teal.gradient))
+                    .frame(width: 96, height: 96)
+                Circle()
+                    .stroke(Color.teal.opacity(0.35), lineWidth: 2)
+                    .frame(width: 96, height: 96)
+                    .scaleEffect(1 + speech.level * 0.5)
+                    .opacity(speech.isListening ? 1 - speech.level : 0)
+                Image(systemName: speech.isListening ? "stop.fill" : "mic.fill")
+                    .font(.system(size: 34, weight: .medium)).foregroundStyle(.white)
+            }
+        }
+        .buttonStyle(.plain)
+        .disabled(model.isThinking || !model.hasKey)
+        .animation(.easeOut(duration: 0.1), value: speech.level)
+        .accessibilityLabel(speech.isListening ? "Stop and run" : "Speak a command")
     }
 
     private var notchTitle: String {
@@ -157,27 +253,11 @@ private struct CommandView: View {
         speech.isListening ? "Tap the button to send" : model.detail
     }
 
-    private var micButton: some View {
-        Button(action: model.toggle) {
-            ZStack {
-                Circle()
-                    .fill(speech.isListening ? Color.red.gradient : Color.teal.gradient)
-                    .frame(width: 112, height: 112)
-                    .scaleEffect(1 + (speech.isListening ? speech.level * 0.25 : 0))
-                    .animation(.easeOut(duration: 0.08), value: speech.level)
-                Image(systemName: speech.isListening ? "stop.fill" : "mic.fill")
-                    .font(.system(size: 40, weight: .medium)).foregroundStyle(.white)
-            }
-        }
-        .buttonStyle(.plain)
-        .disabled(model.isThinking)
-        .accessibilityLabel(speech.isListening ? "Stop and run" : "Speak a command")
-    }
-
     private func send() {
         let command = typed.trimmingCharacters(in: .whitespaces)
         guard !command.isEmpty else { return }
         typed = ""
+        typing = false
         model.run(command)
     }
 }
@@ -189,12 +269,17 @@ private struct SettingsSheet: View {
     var body: some View {
         NavigationStack {
             Form {
-                Section("OpenRouter key") {
-                    SecureField(model.hasKey ? "Key saved — enter a replacement" : "OpenRouter API key",
-                                text: $model.pendingKey)
-                    Button("Save key") { model.saveKey() }
-                        .disabled(model.pendingKey.trimmingCharacters(in: .whitespaces).isEmpty)
-                    Text("Kept in this iPhone's Keychain. Your command and your shortcut names are sent to OpenRouter; nothing else is.")
+                Section("API keys") {
+                    SecureField(model.hasTypeSafe ? "TypeSafe key saved — enter a replacement"
+                                                  : "TypeSafe API key",
+                                text: $model.pendingTypeSafe)
+                    SecureField(model.hasOpenRouter ? "OpenRouter key saved — enter a replacement"
+                                                    : "OpenRouter API key",
+                                text: $model.pendingOpenRouter)
+                    Button("Save keys") { model.saveKeys() }
+                        .disabled(model.pendingTypeSafe.trimmingCharacters(in: .whitespaces).isEmpty &&
+                                  model.pendingOpenRouter.trimmingCharacters(in: .whitespaces).isEmpty)
+                    Text("Both are kept in this iPhone's Keychain. OpenRouter is the one the phone calls: your command and your shortcut names go to it, nothing else. TypeSafe is stored for the Mac app's pipeline and is not called from the phone.")
                         .font(.caption).foregroundStyle(.secondary)
                 }
                 Section("Wake word") {
@@ -206,7 +291,7 @@ private struct SettingsSheet: View {
                         .font(.caption).foregroundStyle(.secondary)
                 }
                 Section("Your Shortcuts") {
-                    TextEditor(text: $model.shortcuts).frame(minHeight: 120)
+                    TextEditor(text: $model.shortcuts).frame(minHeight: 110)
                     Text("One name per line, exactly as they appear in the Shortcuts app. iOS gives no way to read them, so this list is how Lyra knows what you can run — and running a shortcut is the only way anything real happens in another app.")
                         .font(.caption).foregroundStyle(.secondary)
                 }

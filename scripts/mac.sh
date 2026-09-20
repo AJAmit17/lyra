@@ -13,10 +13,20 @@ if [[ ! -d "${DEVELOPER_DIR:-/nonexistent}" ]]; then
   exit 1
 fi
 
+# A running copy holds the app bundle open, so stop it rather than refusing to build.
 running() { pgrep -x Lyra >/dev/null; }
+was_running=false
 if running; then
-  echo 'Quit Lyra before building and installing.' >&2
-  exit 1
+  was_running=true
+  echo 'Quitting the running Lyra…'
+  osascript -e 'quit app "Lyra"' >/dev/null 2>&1 || true
+  for _ in 1 2 3 4 5 6 7 8 9 10; do running || break; sleep 0.3; done
+  running && pkill -x Lyra 2>/dev/null || true
+  for _ in 1 2 3 4 5; do running || break; sleep 0.3; done
+  if running; then
+    echo 'Lyra will not quit. Close it from the menu bar icon, then build again.' >&2
+    exit 1
+  fi
 fi
 
 xcrun swift build --package-path mac -c release
@@ -32,15 +42,15 @@ cp mac/Resources/Lyra.icns "$staged/Contents/Resources/Lyra.icns"
 python3 scripts/sign-local.py "$staged"
 
 if running; then
-  echo 'Lyra was opened during the build. Quit it, then build again.' >&2
-  exit 1
+  osascript -e 'quit app "Lyra"' >/dev/null 2>&1 || true
+  for _ in 1 2 3 4 5; do running || break; sleep 0.3; done
 fi
 mkdir -p "$HOME/Applications"
 ditto "$staged" "$installed"
 codesign --verify --strict "$installed"
 printf 'Installed: %s\n' "$installed"
 
-if [[ "${1:-}" == "--run" ]]; then
+if [[ "${1:-}" == "--run" || "$was_running" == true ]]; then
   open "$installed"
   printf 'Running.\n'
 fi

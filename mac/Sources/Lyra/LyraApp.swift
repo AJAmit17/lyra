@@ -1276,7 +1276,12 @@ final class AppModel: ObservableObject {
         }
     }
 
-    /// Grows or shrinks the panel around the notch. Shrinking waits for the content to fade out first.
+    /// Sizes the panel around the notch.
+    ///
+    /// The window frame never changes while anything is animating: it grows before the content
+    /// appears and shrinks only once the content is gone. A resizing window cannot be animated
+    /// smoothly, so the visible morph is done inside SwiftUI, against a frame that is already the
+    /// right size.
     func setOverlayExpanded(_ expanded: Bool) {
         guard let overlay else { return }
         resizeTask?.cancel()
@@ -1284,7 +1289,8 @@ final class AppModel: ObservableObject {
             Notch.place(overlay, size: CGSize(width: Self.overlayWidth, height: Notch.size().height + Self.overlayDrop))
         } else {
             resizeTask = Task {
-                try? await Task.sleep(for: .milliseconds(280))
+                // Longer than the collapse, so the frame never shrinks mid-morph.
+                try? await Task.sleep(for: .milliseconds(360))
                 guard !Task.isCancelled else { return }
                 Notch.place(overlay, size: Notch.size())
             }
@@ -1415,23 +1421,32 @@ private struct VoiceWidget: View {
         return model.headline == "Command stopped" ? model.detail : model.headline
     }
 
+    /// The shape's own height, animated. The window frame is already the right size by the time
+    /// this moves, so the morph costs nothing but redrawing one path.
+    private var shapeHeight: CGFloat { isOpen ? notchHeight + AppModel.overlayDrop : notchHeight }
+
     var body: some View {
-        VStack(spacing: 0) {
-            // Reserved for the physical notch: nothing legible can live here.
-            Color.clear.frame(height: notchHeight)
-            if isOpen { content.transition(.opacity.combined(with: .move(edge: .top))) }
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-        .background {
+        ZStack(alignment: .top) {
             NotchShape()
                 .fill(Color.black)
-                .overlay(NotchShape().fill(.ultraThinMaterial).opacity(isOpen ? 0.35 : 0))
-                .shadow(color: .black.opacity(isOpen ? 0.45 : 0), radius: 12, y: 6)
+                .overlay(NotchShape().fill(.ultraThinMaterial).opacity(isOpen ? 0.3 : 0))
+                .frame(height: shapeHeight)
+                .shadow(color: .black.opacity(isOpen ? 0.5 : 0), radius: 14, y: 8)
+            // Only opacity and scale move here; the shape below carries the size change.
+            content
+                .padding(.top, notchHeight)
+                .opacity(isOpen ? 1 : 0)
+                .scaleEffect(isOpen ? 1 : 0.94, anchor: .top)
+                .blur(radius: isOpen ? 0 : 6)
+                .allowsHitTesting(isOpen)
         }
-        .contentShape(NotchShape())
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+        .contentShape(NotchShape().size(width: AppModel.overlayWidth, height: shapeHeight))
         .preferredColorScheme(.dark)
         .onHover { isHovering = $0 }
-        .animation(.spring(response: 0.34, dampingFraction: 0.82), value: isOpen)
+        // Arriving overshoots a little; leaving must not bounce back towards the eye.
+        .animation(isOpen ? .spring(response: 0.42, dampingFraction: 0.80) : .smooth(duration: 0.30),
+                   value: isOpen)
         .onChange(of: isOpen, initial: true) { _, open in model.setOverlayExpanded(open) }
     }
 
@@ -1484,6 +1499,7 @@ private struct VoiceWidget: View {
         }
         .padding(.horizontal, 20)
         .frame(maxWidth: .infinity)
+        .animation(isOpen ? .easeOut(duration: 0.22).delay(0.08) : .easeIn(duration: 0.12), value: isOpen)
         .overlay(alignment: .topTrailing) {
             HStack(spacing: 2) {
                 Button { model.showSettings() } label: {

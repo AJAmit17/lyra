@@ -131,7 +131,7 @@ enum PhoneBrain {
     }
 
     static func decide(_ utterance: String) async throws -> PhoneAction {
-        guard let key = Keys.key else { throw PhoneActionError.noKey }
+        guard let key = Keys.read(Keys.openRouter) else { throw PhoneActionError.noKey }
         var request = URLRequest(url: URL(string: "https://openrouter.ai/api/v1/chat/completions")!)
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
