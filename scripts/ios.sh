@@ -25,10 +25,15 @@ if [[ "${1:-build}" == "device" ]]; then
 
   # Xcode records the teams for every signed-in Apple ID here. `defaults` exits non-zero when
   # nobody has signed in, which is the case this branch exists to explain, so do not let it abort.
+  # Xcode 27 keys this by account identifier; older versions used IDEProvisioningTeams. The value
+  # is unquoted for a personal team and quoted for some others, so accept both.
   team="${DEVELOPMENT_TEAM:-}"
   if [[ -z "$team" ]]; then
-    team="$(defaults read com.apple.dt.Xcode IDEProvisioningTeams 2>/dev/null |
-      sed -n 's/.*teamID = "\([^"]*\)".*/\1/p' | head -1 || true)"
+    for key in IDEProvisioningTeamByIdentifier IDEProvisioningTeams; do
+      team="$(defaults read com.apple.dt.Xcode "$key" 2>/dev/null |
+        sed -n 's/.*teamID = "\{0,1\}\([A-Z0-9]\{10\}\)"\{0,1\};.*/\1/p' | head -1 || true)"
+      [[ -n "$team" ]] && break
+    done
   fi
   if [[ -z "$team" ]]; then
     cat >&2 <<'HINT'
@@ -58,9 +63,24 @@ HINT
   [[ -d "$app" ]] || { echo "Built app not found at $app" >&2; exit 1; }
 
   xcrun devicectl device install app --device "$udid" "$app"
-  xcrun devicectl device process launch --device "$udid" local.lyra.phone || true
-  echo 'Installed. If the phone refuses to open it, trust the certificate in'
-  echo 'Settings -> General -> VPN & Device Management.'
+  echo
+  echo "Installed on $udid."
+
+  # A free personal team's certificate is untrusted until the owner says otherwise on the phone,
+  # so the first launch after a fresh certificate always fails here. Say what to do about it.
+  if ! xcrun devicectl device process launch --device "$udid" local.lyra.phone >/dev/null 2>&1; then
+    cat <<'TRUST'
+
+It will not open yet: the developer certificate is not trusted on the phone.
+
+  On the iPhone: Settings -> General -> VPN & Device Management
+                 -> Apple Development: <your Apple ID> -> Trust
+
+Then tap Lyra on the home screen, or run this again.
+TRUST
+  else
+    echo 'Launched.'
+  fi
   exit 0
 fi
 

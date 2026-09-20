@@ -104,7 +104,7 @@ make ios-run      # simulator
 make ios-device   # the iPhone plugged in over USB
 ```
 
-`make ios-device` needs an Apple ID signed into Xcode (Settings → Accounts — a free one is enough, the app then runs for seven days before it needs reinstalling) and Developer Mode turned on in Settings → Privacy & Security on the phone.
+`make ios-device` needs an Apple ID signed into Xcode (Settings → Accounts — a free one is enough, the app then runs for seven days before it needs reinstalling) and Developer Mode turned on in Settings → Privacy & Security on the phone. The first install with a new certificate will not launch until you trust it on the phone, in Settings → General → VPN & Device Management.
 
 Your OpenRouter key lives in the phone's Keychain. Your command and your shortcut names go to OpenRouter; nothing else does.
 
