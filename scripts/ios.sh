@@ -1,9 +1,11 @@
 #!/bin/bash
-# Build the iPhone app. Usage: scripts/ios.sh [build|run]
-#   build  compile for the simulator, unsigned (the default)
-#   run    compile, boot a simulator, install and launch
-# Installing on a real iPhone needs your signing team, so that goes through Xcode:
-#   open ios/Lyra.xcodeproj
+# Build the iPhone app. Usage: scripts/ios.sh [build|run|device]
+#   build   compile for the simulator, unsigned (the default)
+#   run     compile, boot a simulator, install and launch
+#   device  build signed and install onto the iPhone plugged in over USB
+#
+# `device` needs an Apple ID signed into Xcode (Settings -> Accounts). A free one is enough:
+# it gives a personal team, and the app then runs for seven days before it needs reinstalling.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
@@ -12,6 +14,56 @@ if [[ -z "${DEVELOPER_DIR:-}" && -d /Applications/Xcode.app/Contents/Developer ]
 fi
 
 project=ios/Lyra.xcodeproj
+
+if [[ "${1:-build}" == "device" ]]; then
+  udid="$(xcrun devicectl list devices 2>/dev/null |
+    awk '/physical/ && /connected/ {for (i = 1; i <= NF; i++) if ($i ~ /^[0-9A-F-]{24,}$/) {print $i; exit}}')"
+  if [[ -z "$udid" ]]; then
+    echo 'No iPhone is connected. Plug it in, unlock it, and tap Trust on the phone.' >&2
+    exit 1
+  fi
+
+  # Xcode records the teams for every signed-in Apple ID here. `defaults` exits non-zero when
+  # nobody has signed in, which is the case this branch exists to explain, so do not let it abort.
+  team="${DEVELOPMENT_TEAM:-}"
+  if [[ -z "$team" ]]; then
+    team="$(defaults read com.apple.dt.Xcode IDEProvisioningTeams 2>/dev/null |
+      sed -n 's/.*teamID = "\([^"]*\)".*/\1/p' | head -1 || true)"
+  fi
+  if [[ -z "$team" ]]; then
+    cat >&2 <<'HINT'
+No Apple ID is signed into Xcode, so the app cannot be signed for a real phone.
+
+  1. Xcode -> Settings -> Accounts -> + -> Apple ID, and sign in. A free account works.
+  2. On the iPhone: Settings -> Privacy & Security -> Developer Mode -> on, then restart it.
+  3. Run this again.
+
+To use a specific team: DEVELOPMENT_TEAM=XXXXXXXXXX scripts/ios.sh device
+HINT
+    exit 1
+  fi
+
+  echo "Signing with team $team for device $udid"
+  xcodebuild -project "$project" -scheme Lyra -configuration Debug \
+    -destination "id=$udid" -allowProvisioningUpdates \
+    DEVELOPMENT_TEAM="$team" \
+    build | grep -E 'error:|BUILD' || {
+      status=$?
+      [[ $status -eq 1 ]] || exit $status
+    }
+
+  app="$(xcodebuild -project "$project" -scheme Lyra -configuration Debug \
+    -destination "id=$udid" DEVELOPMENT_TEAM="$team" -showBuildSettings 2>/dev/null |
+    awk -F' = ' '/ BUILT_PRODUCTS_DIR/{print $2; exit}')/Lyra.app"
+  [[ -d "$app" ]] || { echo "Built app not found at $app" >&2; exit 1; }
+
+  xcrun devicectl device install app --device "$udid" "$app"
+  xcrun devicectl device process launch --device "$udid" local.lyra.phone || true
+  echo 'Installed. If the phone refuses to open it, trust the certificate in'
+  echo 'Settings -> General -> VPN & Device Management.'
+  exit 0
+fi
+
 common=(-project "$project" -scheme Lyra -sdk iphonesimulator -configuration Debug CODE_SIGNING_ALLOWED=NO)
 
 set -o pipefail

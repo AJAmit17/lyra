@@ -100,9 +100,11 @@ Running a Shortcut is the only route to real work inside another app, and iOS of
 There is no TypeSafe key on the phone because the phone never calls TypeSafe. That API picks an on-screen target out of an accessibility tree; the iPhone app has no tree and no targets, only one sentence to map onto one URL. That is the OpenRouter call, and it is the only key it needs.
 
 ```sh
-make ios-run    # simulator
-open ios/Lyra.xcodeproj   # then set your signing team to run it on a phone
+make ios-run      # simulator
+make ios-device   # the iPhone plugged in over USB
 ```
+
+`make ios-device` needs an Apple ID signed into Xcode (Settings → Accounts — a free one is enough, the app then runs for seven days before it needs reinstalling) and Developer Mode turned on in Settings → Privacy & Security on the phone.
 
 Your OpenRouter key lives in the phone's Keychain. Your command and your shortcut names go to OpenRouter; nothing else does.
 
