@@ -9,6 +9,7 @@ final class PhoneSpeech: ObservableObject {
     @Published private(set) var level: Double = 0
     @Published var status = ""
     var onFinal: ((String) -> Void)?
+    var onFailure: ((String) -> Void)?
 
     private let engine = AVAudioEngine()
     private let recognizer = SFSpeechRecognizer()
@@ -68,7 +69,14 @@ final class PhoneSpeech: ObservableObject {
             Task { @MainActor [weak self] in
                 guard let self else { return }
                 if let result { transcript = result.bestTranscription.formattedString }
-                if error != nil || result?.isFinal == true { finish(deliver: error == nil) }
+                if let error {
+                    // Silence here used to look like "it just doesn't hear me".
+                    let native = error as NSError
+                    report("Speech: \(native.localizedDescription) (\(native.domain) \(native.code))")
+                    finish(deliver: false)
+                } else if result?.isFinal == true {
+                    finish(deliver: true)
+                }
             }
         }
         do {
@@ -92,11 +100,16 @@ final class PhoneSpeech: ObservableObject {
         let text = transcript.trimmingCharacters(in: .whitespacesAndNewlines)
         stopAudio()
         guard deliver, !text.isEmpty else {
-            if deliver { status = "Nothing was heard." }
+            if deliver { report("Nothing was heard. Try again, closer to the microphone.") }
             return
         }
         status = ""
         onFinal?(text)
+    }
+
+    private func report(_ message: String) {
+        status = message
+        onFailure?(message)
     }
 
     private func stopAudio() {

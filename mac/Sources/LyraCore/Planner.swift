@@ -104,8 +104,8 @@ public enum Planner {
             "model": model,
             "max_tokens": 900,
             "temperature": 0,
-            // Reasoning tokens made DeepSeek take 2–7 s per plan and once exhausted the budget; planning needs none.
-            "reasoning": ["enabled": false],
+            // Reasoning is left to the provider: some endpoints make it mandatory and reject the
+            // request outright when it is switched off.
             "messages": [["role": "system", "content": system], ["role": "user", "content": state]],
             "response_format": ["type": "json_schema", "json_schema": ["name": "plan", "strict": true, "schema": schema]]
         ]

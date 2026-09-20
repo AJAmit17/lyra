@@ -43,6 +43,15 @@ final class PhoneModel: ObservableObject {
 
     init() {
         speech.onFinal = { [weak self] text in self?.run(text) }
+        speech.onFailure = { [weak self] message in
+            guard let self else { return }
+            headline = "Didn't catch that"
+            detail = message
+            syncWake()
+        }
+        wake.onFailure = { [weak self] message in
+            self?.detail = message
+        }
         wake.onHeard = { [weak self] in
             guard let self else { return }
             headline = "Yes?"
@@ -61,7 +70,13 @@ final class PhoneModel: ObservableObject {
     var isActive = true { didSet { syncWake() } }
 
     func toggle() {
-        if speech.isListening { speech.stop() } else { wake.stop(); Task { await speech.start() } }
+        if speech.isListening {
+            speech.stop()
+        } else {
+            // One engine at a time: the wake listener must let go of the microphone first.
+            wake.stop()
+            Task { await speech.start(); syncWake() }
+        }
     }
 
     func run(_ command: String) {
@@ -177,6 +192,9 @@ private struct CommandView: View {
                 Text(model.detail)
                     .font(.system(size: 14)).foregroundStyle(.white.opacity(0.5))
                     .multilineTextAlignment(.center)
+            }
+            if !speech.status.isEmpty && speech.isListening {
+                Text(speech.status).font(.system(size: 12)).foregroundStyle(.white.opacity(0.35))
             }
             if !model.hasKey {
                 Button("Add your keys") { showingSettings = true }

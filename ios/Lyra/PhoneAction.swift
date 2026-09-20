@@ -79,6 +79,7 @@ enum PhoneActionError: LocalizedError {
             case 401: return "OpenRouter rejected the key. Check it in Settings."
             case 402: return "OpenRouter reports no credit for this key."
             case 429: return "OpenRouter's rate limit was reached. Try again shortly."
+            case 400: return "OpenRouter rejected the request for \(PhoneBrain.model): \(message ?? "no reason given"). Try another model in Settings."
             case 404: return "OpenRouter cannot serve \(PhoneBrain.model). Pick another model in Settings, or allow more providers at openrouter.ai/settings/privacy."
             default: return "OpenRouter returned HTTP \(status). \(message ?? "Nothing was opened.")"
             }
@@ -145,7 +146,6 @@ enum PhoneBrain {
         request.setValue("Lyra", forHTTPHeaderField: "X-Title")
         request.httpBody = try JSONSerialization.data(withJSONObject: [
             "model": model, "max_tokens": 400, "temperature": 0,
-            "reasoning": ["enabled": false],
             "messages": [["role": "system", "content": system], ["role": "user", "content": utterance]],
             "response_format": ["type": "json_schema",
                                 "json_schema": ["name": "action", "strict": true, "schema": schema]]

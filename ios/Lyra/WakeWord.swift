@@ -12,6 +12,8 @@ final class WakeWord: ObservableObject {
     @Published private(set) var isRunning = false
     @Published private(set) var status = ""
     var onHeard: (() -> Void)?
+    var onFailure: ((String) -> Void)?
+    private var failures = 0
     var phrase = "hey lyra"
 
     private let engine = AVAudioEngine()
@@ -57,14 +59,29 @@ final class WakeWord: ObservableObject {
                     onHeard?()
                     return
                 }
-                // A recognition task ends after about a minute of audio, or on error.
-                if error != nil || result?.isFinal == true { recycle() }
+                if let error {
+                    let native = error as NSError
+                    failures += 1
+                    // Two in a row is not a task ageing out, it is something actually wrong.
+                    if failures >= 2 {
+                        status = "Wake word stopped: \(native.localizedDescription)"
+                        onFailure?(status)
+                        stop()
+                        return
+                    }
+                    recycle()
+                } else if result?.isFinal == true {
+                    // A task ends after about a minute of audio. That one is routine.
+                    failures = 0
+                    recycle()
+                }
             }
         }
         do {
             engine.prepare()
             try engine.start()
             isRunning = true
+            failures = 0
             status = "Listening for “\(phrase)”."
         } catch {
             status = error.localizedDescription
