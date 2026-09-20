@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>CFBundleName</key><string>Lyra</string>
+    <key>CFBundleDisplayName</key><string>Lyra</string>
+    <key>CFBundleIdentifier</key><string>local.lyra</string>
+    <key>CFBundleExecutable</key><string>Lyra</string>
+    <key>CFBundleIconFile</key><string>Lyra</string>
+    <key>CFBundlePackageType</key><string>APPL</string>
+    <key>CFBundleShortVersionString</key><string>0.1.0</string>
+    <key>CFBundleVersion</key><string>1</string>
+    <key>LSMinimumSystemVersion</key><string>14.2</string>
+    <key>LSUIElement</key><true/>
+    <key>NSHighResolutionCapable</key><true/>
+    <key>NSMicrophoneUsageDescription</key><string>Listen while you hold Control–Option–Space to give a desktop command.</string>
+    <key>NSSpeechRecognitionUsageDescription</key><string>Turn your spoken command into text. Apple may process audio online when on-device recognition is unavailable.</string>
+    <key>NSAudioCaptureUsageDescription</key><string>Show a music visualiser in the widget while audio is playing. Audio is reduced to a few levels on the spot and never recorded or sent anywhere.</string>
+    <key>NSDesktopFolderUsageDescription</key><string>Find the names of Desktop folders you ask to open. File contents are not read.</string>
+    <key>NSDocumentsFolderUsageDescription</key><string>Identify folders shown in Finder so they can be opened by voice. File contents are not read.</string>
+    <key>NSDownloadsFolderUsageDescription</key><string>Identify folders shown in Finder so they can be opened by voice. File contents are not read.</string>
+</dict>
+</plist>
